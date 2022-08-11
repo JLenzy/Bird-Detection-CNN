@@ -1,5 +1,7 @@
 # Freefield1010 dataset
 # https://arxiv.org/abs/1309.5275
+
+import os
 import torch.cuda
 from torch.utils.data import Dataset
 import torchaudio
@@ -18,7 +20,7 @@ class FreeField1010Dataset(Dataset):
         self.annotations = pd.read_csv(annotations_file)
         self.audio_directory = audio_directory
         self.device = device
-        self.transformation = transformation.to(device)
+        self.transformation = transformation.to(self.device)
         self.target_sample_rate = target_sample_rate
         self.num_samples = num_samples
 
@@ -26,12 +28,13 @@ class FreeField1010Dataset(Dataset):
         # return number of samples in dataset
         return len(self.annotations)
 
-    def __get__item(self, index):
+    def __getitem__(self, index):
         # __get__item is used to retrieve index item (list[0])
         # freefield[0] will return first index item
 
         audio_sample_path = self._get_audio_sample_path(index)
         label = self._get_audio_sample_label(index)
+        label = float(label)
         signal, sr = torchaudio.load(audio_sample_path) #tensor [channels, samples]
         signal = signal.to(self.device)
 
@@ -48,15 +51,19 @@ class FreeField1010Dataset(Dataset):
         if signal.shape[1] < self.num_samples:
             signal = self._right_padding(signal)
 
+        # convert to MelSpectrogram
+        signal = self.transformation(signal)
 
+        return signal, label
 
     def _get_audio_sample_path(self, index):
         path = os.path.join(self.audio_directory,
-                            self.annotations.iloc[index, 0])
+                            str(self.annotations.iloc[index, 0]))
+        path = path + ".wav"
         return path
 
     def _get_audio_sample_label(self, index):
-        return self.annotations.iloc[index, 0]
+        return self.annotations.iloc[index, 1]
 
     def _resample(self, signal, sr):
         resampler = torchaudio.transforms.Resample(sr, self.target_sample_rate)
@@ -76,18 +83,18 @@ class FreeField1010Dataset(Dataset):
         return signal
 
     # convert to melspectrogram and return
-    mel_spec = self.transformation(signal)
-    return mel_spec, label
+
 
 if __name__ == "__main__":
-    ANNOTATIONS_FILE =
-    AUDIO_DIRECTORY =
-    SAMPLE_RATE = 22050
-    NUM_SAMPLES = 2 * SAMPLE_RATE
 
-    if torch.cuda.is_available()
+    ANNOTATIONS_FILE = "/Users/jlenz/Desktop/Datasets/BirdAudioDetection/metadata.csv"
+    AUDIO_DIRECTORY ="/Users/jlenz/Desktop/Datasets/BirdAudioDetection/wav"
+    SAMPLE_RATE = 22050
+    NUM_SAMPLES = 44100
+
+    if torch.cuda.is_available():
         device = "cuda"
-    else
+    else:
         device = "cpu"
 
     print(f"Using device {device}.")
@@ -96,8 +103,7 @@ if __name__ == "__main__":
         sample_rate=SAMPLE_RATE,
         n_fft=1024,
         hop_length=512,
-        n_mels=64
-    )
+        n_mels=64)
 
     ffbirds = FreeField1010Dataset(ANNOTATIONS_FILE,
                                    AUDIO_DIRECTORY,
@@ -108,9 +114,11 @@ if __name__ == "__main__":
 
     print(f"There are {len(ffbirds)} samples in this dataset.")
 
-    index = 1
+    index = 6
     mel_spec, label = ffbirds[index]
+
     print(f"Signal {index} has label {label}")
     print(f"Number of Channels: {mel_spec.shape[0]}")
-    print(f"Length of File: {mel_spec.shape[1]} Samples ({mel.spec.shape[1] * SAMPLE_RATE} seconds)")
+    print(f"Shape of signal: {mel_spec.shape}")
+    print(f"Length of File: {mel_spec.shape[1]} Samples ({mel_spec.shape[1] / SAMPLE_RATE} seconds)")
 
